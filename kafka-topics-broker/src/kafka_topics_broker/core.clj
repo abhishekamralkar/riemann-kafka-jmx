@@ -5,8 +5,21 @@
             [cheshire.core :as json]
             [clj-yaml.core :as yaml]
             [riemann.client :as rmn])
+  (:import (java.net Socket))
   (:gen-class))
 
+
+
+(defn get-active-zkhost [ hosts zkport ]
+    (doseq [ host hosts ]
+    (try
+      (if (Socket. host zkport)
+      (def zkhost host)
+      )
+    (catch Exception e
+      (println (str host " failed to connect, Trying another connection string"))
+      ))
+    ))
 
 (defn create-zk-connection [host port]
   (def zkclient (zk/connect (string/join ":" [host port]))))
@@ -62,9 +75,11 @@
   [& args]
   (doseq [arg args]
   (def config  (yaml/parse-string (slurp arg)))
-  (def zkhost (get-in config [:zookeeper :host]))
-  (def rmnhost (get-in config [:riemann :host]))
   (def zkport (get-in config [:zookeeper :port]))
+  (get-active-zkhost (get-in config [:zookeeper :host]) zkport)
+  (println zkhost)
+  (def rmnhost (get-in config [:riemann :host]))
+  (def rmnttl  (get-in config [:riemann :ttl]))
   )
 
   ;;(println zkhost)
@@ -106,7 +121,7 @@
         (or (<= messages-in-totalmetric -1 ) (>= messages-in-totalmetric 1000000000)) "warning"
         :else "ok"
       )]
-      (riemann-send-event "kafka.topics.messages-in.MeanRate" topic state messages-in-totalmetric (apply str messages-in-description) 300)
+      (riemann-send-event "kafka.topics.messages-in.MeanRate" topic state messages-in-totalmetric (apply str messages-in-description) rmnttl)
       )
 
     ;;  (println bytes-in-description)
@@ -117,7 +132,7 @@
         (or (<= bytes-in-totalmetric -1 ) (>= bytes-in-totalmetric 10000000000)) "warning"
         :else "ok"
         ) ]
-      (riemann-send-event "kafka.topics.bytes-in.MeanRate" topic state bytes-in-totalmetric (apply str bytes-in-description) 300)
+      (riemann-send-event "kafka.topics.bytes-in.MeanRate" topic state bytes-in-totalmetric (apply str bytes-in-description) rmnttl)
     )
     ;;  (println bytes-out-description)
     ;;  (println bytes-out-totalmetric)
@@ -127,7 +142,7 @@
          (or (<= bytes-out-totalmetric -1 ) (>= bytes-out-totalmetric 10000000000 )) "warning"
          :else "ok"
          )]
-      (riemann-send-event "kafka.topics.bytes-out.MeanRate" topic state bytes-out-totalmetric (apply str bytes-out-description) 300)
+      (riemann-send-event "kafka.topics.bytes-out.MeanRate" topic state bytes-out-totalmetric (apply str bytes-out-description) rmnttl)
   )
 
   )
